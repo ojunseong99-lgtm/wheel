@@ -1,0 +1,195 @@
+<!doctype html>
+<html lang="ko">
+<head>
+  <meta charset="utf-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1" />
+  <title>mod 12 회전 원판</title>
+  <style>
+    body { font-family: system-ui, sans-serif; margin: 24px; line-height: 1.4; }
+    h1 { margin: 0 0 12px; }
+    .panel { display: grid; gap: 12px; max-width: 720px; }
+    .box { border: 1px solid #ddd; border-radius: 12px; padding: 14px; }
+    .row { display: flex; gap: 12px; flex-wrap: wrap; align-items: center; }
+    label { display: inline-flex; gap: 8px; align-items: center; }
+    input[type="number"] { width: 120px; padding: 6px 8px; }
+    .small input[type="number"] { width: 90px; }
+    button { padding: 8px 10px; cursor: pointer; border: 1px solid #ccc; border-radius: 10px; background: #fff; }
+    button:hover { background: #f6f6f6; }
+    .hint { color: #444; font-size: 14px; }
+    .readout { font-variant-numeric: tabular-nums; }
+    svg { width: 360px; height: 360px; max-width: 90vw; }
+    .divider { height: 1px; background: #eee; margin: 6px 0; }
+  </style>
+</head>
+<body>
+  <h1>회전 원판</h1>
+
+  <div class="panel box">
+    <div class="row">
+      <label>
+        자연수 :
+        <input id="nInput" type="number" min="0" step="1" value="0" />
+      </label>
+      <button id="add1Btn">+1</button>
+      <button id="add5Btn">+5</button>
+      <button id="resetBtn">리셋</button>
+    </div>
+
+    <div class="divider"></div>
+
+    <div class="row small">
+      <strong>덧셈:</strong>
+      <label>&#x25CB; <input id="aInput" type="number" step="1" value="0" /></label>
+      <label>&#x25B3; <input id="bInput" type="number" step="1" value="0" /></label>
+      <button id="calcBtn">계산( &#x25CB; + &#x25B3; )</button>
+      <span class="hint">(계산 결과만큼 원판이 회전합니다)</span>
+    </div>
+
+    <div class="readout">
+      n = <span id="nVal">0</span>,
+      n mod 12 = <span id="kVal">12</span>,
+      (표시 각도 = <span id="degVal">0</span>°)
+    </div>
+  </div>
+
+  <div class="box">
+    <svg viewBox="0 0 400 400" aria-label="mod 12 원판">
+      <!-- 기준 화살표(고정) -->
+      <polygon points="200,18 188,46 212,46" />
+      <line x1="200" y1="46" x2="200" y2="70" stroke="black" stroke-width="3"/>
+
+      <!-- 회전될 그룹(원판) -->
+      <g id="wheel" transform="rotate(0 200 200)">
+        <circle cx="200" cy="200" r="150" fill="none" stroke="black" stroke-width="3"/>
+        <g id="ticks"></g>
+        <g id="labels"></g>
+      </g>
+    </svg>
+  </div>
+
+  <script>
+    const wheel = document.getElementById("wheel");
+    const ticks = document.getElementById("ticks");
+    const labels = document.getElementById("labels");
+
+    const nInput = document.getElementById("nInput");
+    const add1Btn = document.getElementById("add1Btn");
+    const add5Btn = document.getElementById("add5Btn");
+    const resetBtn = document.getElementById("resetBtn");
+
+    const aInput = document.getElementById("aInput");
+    const bInput = document.getElementById("bInput");
+    const calcBtn = document.getElementById("calcBtn");
+
+    const nVal = document.getElementById("nVal");
+    const kVal = document.getElementById("kVal");
+    const degVal = document.getElementById("degVal");
+  
+    // 애니메이션
+    wheel.style.transition = "transform 450ms ease";
+
+    // 상태: "누적 이동 칸 수"와 "현재 회전각"
+    // - totalSteps: 현재 n 값(누적 이동)
+    // - currentAngleDeg: wheel의 실제 transform angle(누적)
+    let totalSteps = 0;
+    let currentAngleDeg = 0;
+
+    function makeWheel() {
+      for (let i = 0; i < 12; i++) {
+        const angleRad = (i * 30) * Math.PI / 180;
+
+        // tick
+        const r1 = 150, r2 = 135;
+        const x1 = 200 + r1 * Math.sin(angleRad);
+        const y1 = 200 - r1 * Math.cos(angleRad);
+        const x2 = 200 + r2 * Math.sin(angleRad);
+        const y2 = 200 - r2 * Math.cos(angleRad);
+
+        const line = document.createElementNS("http://www.w3.org/2000/svg", "line");
+        line.setAttribute("x1", x1); line.setAttribute("y1", y1);
+        line.setAttribute("x2", x2); line.setAttribute("y2", y2);
+        line.setAttribute("stroke", "black");
+        line.setAttribute("stroke-width", "2");
+        ticks.appendChild(line);
+
+        // label
+        const rt = 112;
+        const xt = 200 + rt * Math.sin(angleRad);
+        const yt = 200 - rt * Math.cos(angleRad);
+
+        const text = document.createElementNS("http://www.w3.org/2000/svg", "text");
+        text.setAttribute("x", xt);
+        text.setAttribute("y", yt);
+        text.setAttribute("text-anchor", "middle");
+        text.setAttribute("dominant-baseline", "middle");
+        text.setAttribute("font-size", "18");
+
+        // 0 대신 12 표시 (즉, i=0 자리에 12)
+        text.textContent = (i === 0 ? 12 : i).toString();
+        labels.appendChild(text);
+      }
+    }
+
+    function mod12(n) {
+      return ((n % 12) + 12) % 12;
+    }
+
+    function displayLabelFromMod(k) {
+      return k === 0 ? 12 : k;
+    }
+
+    function toInt(x, fallback = 0) {
+      const v = Number(x);
+      return Number.isFinite(v) ? Math.trunc(v) : fallback;
+    }
+
+    // 핵심: "나머지 위치"로 각도를 바로 세팅하지 않고,
+    // 이전 n에서 새 n으로 이동한 delta만큼 '누적 회전'을 업데이트해서 연속 회전되게 한다.
+    function setN(newN, exprText = null) {
+      newN = Math.max(0, toInt(newN, 0));
+
+      const prev = totalSteps;
+      const delta = newN - prev;          // 이번에 몇 칸 이동했는지
+      const deltaDeg = delta * 30;
+
+      totalSteps = newN;
+
+      // 화살표는 고정, 원판을 반대방향으로 돌리면 "앞으로 이동"처럼 보임
+      currentAngleDeg -= deltaDeg;
+      wheel.setAttribute("transform", `rotate(${currentAngleDeg} 200 200)`);
+
+      const k = mod12(totalSteps);
+      const shown = displayLabelFromMod(k);
+
+      nInput.value = totalSteps.toString();
+      nVal.textContent = totalSteps.toString();
+      kVal.textContent = shown.toString();
+      degVal.textContent = (k * 30).toString();
+
+      if (exprText !== null) exprVal.textContent = exprText;
+    }
+
+    // 이벤트: n 입력 변화
+    nInput.addEventListener("input", () => {
+      // 입력만으로도 즉시 반영 (수업 중 빠르게 조작 가능)
+      setN(nInput.value, "입력으로 n 설정");
+    });
+
+    add1Btn.addEventListener("click", () => setN(totalSteps + 1, `${totalSteps} + 1 = ${totalSteps + 1}`));
+    add5Btn.addEventListener("click", () => setN(totalSteps + 5, `${totalSteps} + 5 = ${totalSteps + 5}`));
+    resetBtn.addEventListener("click", () => setN(0, "리셋: n = 0"));
+
+    // 덧셈 계산 버튼: a+b 만큼(= 결과 n) 회전
+    calcBtn.addEventListener("click", () => {
+      const a = Math.max(0, toInt(aInput.value, 0));
+      const b = Math.max(0, toInt(bInput.value, 0));
+      const s = a + b;
+      setN(s, `${a} + ${b} = ${s}`);
+    });
+
+    // 초기화
+    makeWheel();
+    setN(0, "-");
+  </script>
+</body>
+</html>
